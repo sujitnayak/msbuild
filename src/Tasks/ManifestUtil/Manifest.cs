@@ -385,7 +385,7 @@ namespace Microsoft.Build.Tasks.Deployment.ManifestUtilities
             XmlNamespaceManager nsmgr = XmlNamespaces.GetNamespaceManager(document.NameTable);
             AssemblyIdentity appManifest = AssemblyIdentity.FromManifest(applicationManifestPath);
 
-            // update path to application manifest            
+            // update path to application manifest
             XmlNode codeBaseNode = null;
             foreach (string xpath in XPaths.codebasePaths)
             {
@@ -506,17 +506,27 @@ namespace Microsoft.Build.Tasks.Deployment.ManifestUtilities
             f.Size = size;
 
             //
-            // .NETCore Launcher.exe based Deployment: If the filereference is for apphost.exe, we need to change
-            // the ResolvedPath and TargetPath to {assemblyname}.exe before we write the manifest, so that the
-            // manifest does not have a file reference to apphost.exe
+            // .NET >= 5 ClickOnce: If the file reference is for apphost.exe, we need to change the filename
+            // in ResolvedPath to TargetPath so we don't end up publishing the file as apphost.exe.
+            // If the TargetPath is not present, we will fallback to AssemblyName.
             //
             string fileName = Path.GetFileName(f.ResolvedPath);
             if (LauncherBasedDeployment &&
-                fileName.Equals(Constants.AppHostExe, StringComparison.InvariantCultureIgnoreCase) &&
-                !String.IsNullOrEmpty(AssemblyName))
+                fileName.Equals(Constants.AppHostExe, StringComparison.InvariantCultureIgnoreCase))
             {
-                f.ResolvedPath = Path.Combine(Path.GetDirectoryName(f.ResolvedPath), AssemblyName);
-                f.TargetPath = BaseReference.GetDefaultTargetPath(f.ResolvedPath);
+                if (!String.IsNullOrEmpty(f.TargetPath))
+                {
+                    f.ResolvedPath = Path.Combine(Path.GetDirectoryName(f.ResolvedPath), f.TargetPath);
+                }
+                else if (!String.IsNullOrEmpty(AssemblyName))
+                {
+                    f.ResolvedPath = Path.Combine(Path.GetDirectoryName(f.ResolvedPath), AssemblyName);
+                    f.TargetPath = BaseReference.GetDefaultTargetPath(f.ResolvedPath);
+                }
+                else
+                {
+                    Debug.Assert(false, "TargetPath and AssemblyName are both empty");
+                }
             }
 
             if (String.IsNullOrEmpty(f.TargetPath))
@@ -611,7 +621,7 @@ namespace Microsoft.Build.Tasks.Deployment.ManifestUtilities
                 return;
             }
 
-            var identityList = new Dictionary<string, NGen<bool>>();
+            var identityList = new Dictionary<string, bool>();
             foreach (AssemblyReference assembly in AssemblyReferences)
             {
                 if (assembly.AssemblyIdentity != null)
@@ -695,7 +705,7 @@ namespace Microsoft.Build.Tasks.Deployment.ManifestUtilities
                     }
                 }
 
-                // Either we are looking at the entry point assembly or the assembly is not platform neutral. 
+                // Either we are looking at the entry point assembly or the assembly is not platform neutral.
                 // We need to compare the application's platform to the component's platform,
                 // if they don't match then flag component as a mismatch...
                 return !String.Equals(AssemblyIdentity.ProcessorArchitecture, assembly.AssemblyIdentity.ProcessorArchitecture, StringComparison.OrdinalIgnoreCase);
