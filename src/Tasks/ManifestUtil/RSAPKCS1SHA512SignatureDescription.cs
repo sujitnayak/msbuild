@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 
 namespace System.Deployment.Internal.CodeSigning
 {
-    [SuppressMessage("Microsoft.Naming", "CA1709:IdentifiersShouldBeCasedCorrectly", MessageId = "RSAPKCS", Justification = "This casing is to match the existing RSAPKCS1SHA1SignatureDescription type")]
+    [SuppressMessage("Microsoft.Naming", "CA1709:IdentifiersShouldBeCasedCorrectly", MessageId = "RSAPKCS", Justification = "This casing is to match the existing RSAPKCS1SHA256SignatureDescription type")]
     [SuppressMessage("Microsoft.Naming", "CA1709:IdentifiersShouldBeCasedCorrectly", MessageId = "SHA", Justification = "This casing is to match the use of SHA throughout the framework")]
     public sealed class RSAPKCS1SHA512SignatureDescription : SignatureDescription
     {
@@ -24,6 +24,7 @@ namespace System.Deployment.Internal.CodeSigning
             DeformatterAlgorithm = typeof(RSAPKCS1SignatureDeformatter).FullName;
         }
 
+        [RequiresUnreferencedCode("CreateDeformatter resolves the deformatter algorithm by name via reflection; matches the base SignatureDescription.CreateDeformatter requirement.")]
         public override AsymmetricSignatureDeformatter CreateDeformatter(AsymmetricAlgorithm key)
         {
             if (key == null)
@@ -36,6 +37,7 @@ namespace System.Deployment.Internal.CodeSigning
             return deformatter;
         }
 
+        [RequiresUnreferencedCode("CreateFormatter resolves the formatter algorithm by name via reflection; matches the base SignatureDescription.CreateFormatter requirement.")]
         public override AsymmetricSignatureFormatter CreateFormatter(AsymmetricAlgorithm key)
         {
             if (key == null)

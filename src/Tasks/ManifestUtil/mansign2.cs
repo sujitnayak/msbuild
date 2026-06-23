@@ -248,18 +248,18 @@ namespace System.Deployment.Internal.CodeSigning
         internal const string Sha256SignatureMethodUri = @"http://www.w3.org/2000/09/xmldsig#rsa-sha256";
         internal const string Sha384SignatureMethodUri = @"http://www.w3.org/2000/09/xmldsig#rsa-sha384";
         internal const string Sha512SignatureMethodUri = @"http://www.w3.org/2000/09/xmldsig#rsa-sha512";
+        internal const string Sha1DigestMethod = @"http://www.w3.org/2000/09/xmldsig#sha1";
         internal const string Sha256DigestMethod = @"http://www.w3.org/2000/09/xmldsig#sha256";
         internal const string Sha384DigestMethod = @"http://www.w3.org/2000/09/xmldsig#sha384"; 
         internal const string Sha512DigestMethod = @"http://www.w3.org/2000/09/xmldsig#sha512";
-        internal const string Sha1DigestMethod = @"http://www.w3.org/2000/09/xmldsig#sha1";
 
 #if FEATURE_CRYPTOGRAPHIC_FACTORY_ALGORITHM_NAMES
-        internal static readonly Dictionary<string, Func<string, HashAlgorithm>> SupportedHashAlgorithmsFactories
-            = new Dictionary<string, Func<string, HashAlgorithm>>(StringComparer.OrdinalIgnoreCase)
+        internal static readonly Dictionary<string, Func<HashAlgorithm>> SupportedHashAlgorithmsFactories
+            = new Dictionary<string, Func<HashAlgorithm>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["SHA256"] = (algorithmName) => SHA256.Create("System.Security.Cryptography.SHA256CryptoServiceProvider"),
-            ["SHA384"] = (algorithmName) => SHA384.Create("System.Security.Cryptography.SHA384CryptoServiceProvider"),
-            ["SHA512"] = (algorithmName) => SHA512.Create("System.Security.Cryptography.SHA512CryptoServiceProvider"),
+            ["SHA256"] = () => SHA256.Create("System.Security.Cryptography.SHA256CryptoServiceProvider"),
+            ["SHA384"] = () => SHA384.Create("System.Security.Cryptography.SHA384CryptoServiceProvider"),
+            ["SHA512"] = () => SHA512.Create("System.Security.Cryptography.SHA512CryptoServiceProvider"),
         };
 #else
         internal static readonly Dictionary<string, Func<HashAlgorithm>> SupportedHashAlgorithmsFactories
@@ -272,27 +272,36 @@ namespace System.Deployment.Internal.CodeSigning
 #endif
 
 #if FEATURE_CRYPTOGRAPHIC_FACTORY_ALGORITHM_NAMES
-        internal static Func<string, HashAlgorithm> GetHashAlgorithmFactory(X509Certificate2 cert)
+        internal static Func<HashAlgorithm> GetHashAlgorithmFactory(X509Certificate2 cert)
 #else
         internal static Func<HashAlgorithm> GetHashAlgorithmFactory(X509Certificate2 cert)
 #endif
         {
-            string algoName = GetHashAlgorithmName(cert);
+            string algoName = GetHashAlgorithmNameFromCert(cert)?.Name ?? string.Empty;
             return SupportedHashAlgorithmsFactories.TryGetValue(algoName, out var algorithmFactory)
                 ? algorithmFactory
                 : null;
         }
 
-        internal static string GetHashAlgorithmName(X509Certificate2 cert)
+        internal static HashAlgorithmName? GetHashAlgorithmNameFromSignatureMethodUri(string signatureMethodUri)
         {
-            Oid oid = cert.SignatureAlgorithm;
-            if (string.Equals(oid.Value, Win32.szOID_RSA_SHA256RSA, StringComparison.OrdinalIgnoreCase)) { return "sha256"; }
-            if (string.Equals(oid.Value, Win32.szOID_RSA_SHA384RSA, StringComparison.OrdinalIgnoreCase)) { return "sha384"; }
-            if (string.Equals(oid.Value, Win32.szOID_RSA_SHA512RSA, StringComparison.OrdinalIgnoreCase)) { return "sha512"; }
-            return string.Empty;
+            if (string.Equals(signatureMethodUri, ManifestSignatureUtility.Sha512SignatureMethodUri, StringComparison.OrdinalIgnoreCase)) { return HashAlgorithmName.SHA512; }
+            if (string.Equals(signatureMethodUri, ManifestSignatureUtility.Sha384SignatureMethodUri, StringComparison.OrdinalIgnoreCase)) { return HashAlgorithmName.SHA384; }
+            if (string.Equals(signatureMethodUri, ManifestSignatureUtility.Sha256SignatureMethodUri, StringComparison.OrdinalIgnoreCase)) { return HashAlgorithmName.SHA256; }
+            if (string.Equals(signatureMethodUri, ManifestSignatureUtility.Sha1SignatureMethodUri, StringComparison.OrdinalIgnoreCase)) { return HashAlgorithmName.SHA1; }
+            return null;
         }
 
-        internal static string GetHashAlgorithmUri(X509Certificate2 cert)
+        internal static HashAlgorithmName? GetHashAlgorithmNameFromCert(X509Certificate2 cert)
+        {
+            Oid oid = cert.SignatureAlgorithm;
+            if (string.Equals(oid.Value, Win32.szOID_RSA_SHA256RSA, StringComparison.OrdinalIgnoreCase)) { return HashAlgorithmName.SHA256; }
+            if (string.Equals(oid.Value, Win32.szOID_RSA_SHA384RSA, StringComparison.OrdinalIgnoreCase)) { return HashAlgorithmName.SHA384; }
+            if (string.Equals(oid.Value, Win32.szOID_RSA_SHA512RSA, StringComparison.OrdinalIgnoreCase)) { return HashAlgorithmName.SHA512; }
+            return null;
+        }
+
+        internal static string GetHashAlgorithmUriFromCert(X509Certificate2 cert)
         {
             Oid oid = cert.SignatureAlgorithm;
             if (string.Equals(oid.Value, Win32.szOID_RSA_SHA256RSA, StringComparison.OrdinalIgnoreCase)) { return ManifestSignatureUtility.Sha256SignatureMethodUri; }
@@ -301,7 +310,7 @@ namespace System.Deployment.Internal.CodeSigning
             return string.Empty;
         }
 
-        internal static string GetDigestAlgorithmUri(X509Certificate2 cert)
+        internal static string GetDigestAlgorithmUriFromCert(X509Certificate2 cert)
         {
             Oid oid = cert.SignatureAlgorithm;
             if (string.Equals(oid.Value, Win32.szOID_RSA_SHA256RSA, StringComparison.OrdinalIgnoreCase)) { return ManifestSignatureUtility.Sha256DigestMethod; }
@@ -674,11 +683,7 @@ namespace System.Deployment.Internal.CodeSigning
                 var algorithmFactory = ManifestSignatureUtility.GetHashAlgorithmFactory(cert);
                 if (algorithmFactory != null)
                 {
-#if FEATURE_CRYPTOGRAPHIC_FACTORY_ALGORITHM_NAMES
-                    using (var algorithm = algorithmFactory("System.Security.Cryptography.SHA256CryptoServiceProvider"))
-#else
                     using (var algorithm = algorithmFactory())
-#endif                                        
                     {
                         byte[] hash = algorithm.ComputeHash(exc.GetOutput() as MemoryStream);
                         if (hash == null)
@@ -787,7 +792,7 @@ namespace System.Deployment.Internal.CodeSigning
             signedXml.SignedInfo.CanonicalizationMethod = SignedXml.XmlDsigExcC14NTransformUrl;
             if (signer.UseSha256OrHigher)
             {
-                signedXml.SignedInfo.SignatureMethod = ManifestSignatureUtility.GetHashAlgorithmUri(signer.Certificate);
+                signedXml.SignedInfo.SignatureMethod = ManifestSignatureUtility.GetHashAlgorithmUriFromCert(signer.Certificate);
                 if (string.IsNullOrEmpty(signedXml.SignedInfo.SignatureMethod))
                 {
                     throw new CryptographicException(Win32.CRYPT_E_UNKNOWN_ALGO);
@@ -807,7 +812,7 @@ namespace System.Deployment.Internal.CodeSigning
             reference.Uri = "";
             if (signer.UseSha256OrHigher)
             {
-                reference.DigestMethod = ManifestSignatureUtility.GetDigestAlgorithmUri(signer.Certificate);
+                reference.DigestMethod = ManifestSignatureUtility.GetDigestAlgorithmUriFromCert(signer.Certificate);
                 if (string.IsNullOrEmpty(reference.DigestMethod))
                 {
                     throw new CryptographicException(Win32.CRYPT_E_UNKNOWN_ALGO);
@@ -1058,7 +1063,7 @@ namespace System.Deployment.Internal.CodeSigning
             signedXml.SignedInfo.CanonicalizationMethod = SignedXml.XmlDsigExcC14NTransformUrl;
             if (signer.UseSha256OrHigher)
             {
-                signedXml.SignedInfo.SignatureMethod = ManifestSignatureUtility.GetHashAlgorithmUri(signer.Certificate);
+                signedXml.SignedInfo.SignatureMethod = ManifestSignatureUtility.GetHashAlgorithmUriFromCert(signer.Certificate);
                 if (string.IsNullOrEmpty(signedXml.SignedInfo.SignatureMethod))
                 {
                     throw new CryptographicException(Win32.CRYPT_E_UNKNOWN_ALGO);
@@ -1082,7 +1087,7 @@ namespace System.Deployment.Internal.CodeSigning
             enveloped.Uri = "";
             if (signer.UseSha256OrHigher)
             {
-                enveloped.DigestMethod = ManifestSignatureUtility.GetDigestAlgorithmUri(signer.Certificate);
+                enveloped.DigestMethod = ManifestSignatureUtility.GetDigestAlgorithmUriFromCert(signer.Certificate);
                 if (string.IsNullOrEmpty(enveloped.DigestMethod))
                 {
                     throw new CryptographicException(Win32.CRYPT_E_UNKNOWN_ALGO);
