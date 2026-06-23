@@ -848,7 +848,7 @@ namespace Microsoft.Build.Tasks.Deployment.ManifestUtilities
         internal static string GetCommandLineParameters(X509Certificate2 cert, Uri timestampUrl, string path,
                                                         bool useSha256OrHigher, bool useRFC3161Timestamp)
         {
-            string hashAlgoName = ManifestSignatureUtility.GetHashAlgorithmName(cert);
+            string hashAlgoName = ManifestSignatureUtility.GetHashAlgorithmNameFromCert(cert)?.Name;
             if (string.IsNullOrEmpty(hashAlgoName))
             {
                 throw new CryptographicException(System.Deployment.Internal.CodeSigning.Win32.CRYPT_E_UNKNOWN_ALGO);
